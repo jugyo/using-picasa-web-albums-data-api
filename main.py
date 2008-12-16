@@ -49,9 +49,9 @@ class MainPage(webapp.RequestHandler):
     
     self.response.out.write("<html><body>%s</body></html>" % html)
 
-# セッショントークン取得用コントローラー
+# セッショントークンを取得するためのコントローラー
 #
-# Picasa 側で「アクセス許可」の操作を行った後にここに帰ってきます。
+# Picasa 側で「アクセス許可」の操作を行った後、ここに帰ってきます。
 # ワンタイムトークン（AuthSubToken）をセッショントークンにアップグレードします。
 #
 # このデモではセッショントークンを memcache に入れてますが、
