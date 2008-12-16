@@ -1,3 +1,6 @@
+﻿#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import cgi
 import wsgiref.handlers
 import logging
@@ -18,19 +21,42 @@ import atom.url
 
 import settings
 
+# メインページ
+#
+# 指定したユーザーの画像を Picasa から取ってきて表示します。
+# 有効なセッショントークンを持っている場合は非公開に設定している画像も表示されます。
+#
+# テンプレートの使い方がよくわからないのでソース中にごりごり HTML 書いてます…
+#
 class MainPage(webapp.RequestHandler):
   def get(self):
     html = '<div style="text-align: right;">%s</div>' % render_auth_link()
     
     if self.request.get('user_id'):
+      gd_client = get_gdata_client()
+
+      session_token = memcache.get('token')
+      if session_token:
+        # セッショントークンがあれば client にセット
+        logging.info("session_token=%s" % session_token)
+        gd_client.current_token = session_token
+
       user_id = self.request.get('user_id').encode('utf-8')
       html += render_user_id_form(user_id)
-      html += render_photos(user_id)
+      html += render_photos(gd_client, user_id)
     else:
       html += render_user_id_form('')
     
     self.response.out.write("<html><body>%s</body></html>" % html)
 
+# セッショントークン取得用コントローラー
+#
+# Picasa 側で「アクセス許可」の操作を行った後にここに帰ってきます。
+# ワンタイムトークン（AuthSubToken）をセッショントークンにアップグレードします。
+#
+# このデモではセッショントークンを memcache に入れてますが、
+# 実際にはユーザーアカウントと結びつけて DataStore に入れることになると思います。
+#
 class UpgradeTokenPage(webapp.RequestHandler):
   def get(self):
     gd_client = get_gdata_client()
@@ -44,12 +70,12 @@ class UpgradeTokenPage(webapp.RequestHandler):
     if session_token:
       memcache.add('token', session_token, 3600)
     
-    self.redirect('/')
+    self.response.out.write("<html><body>トークンを取得しました。</body></html>")
 
 def render_auth_link():
   gd_client = get_gdata_client()
   next_url = atom.url.Url('http', settings.HOST_NAME, path='/upgrade_to_session_token')
-  return '<a href="%s">Request token</a>' % gd_client.GenerateAuthSubURL(
+  return '<a href="%s" target="_brank">トークンを発行する</a>' % gd_client.GenerateAuthSubURL(
     next_url, ('http://picasaweb.google.com/data/',), secure=False, session=True)
 
 def get_gdata_client():
@@ -67,14 +93,7 @@ def render_user_id_form(user_id):
 """
   return form_html % user_id
 
-def render_photos(user_id):
-  gd_client = get_gdata_client()
-
-  session_token = memcache.get('token')
-  if session_token:
-    logging.info("session_token=%s" % session_token)
-    gd_client.current_token = session_token
-
+def render_photos(gd_client, user_id):
   html = ''
   for album in gd_client.GetUserFeed(user=user_id).entry:
     html += '<div style="border: dotted 1px gray; margin: 10px; padding: 0 10px;">'
